@@ -1329,6 +1329,13 @@ function draw() {
 // Debug handle for testing from the console
 window.BLOCKY_PONG = game;
 
+// PWA: offline cache + installability
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
