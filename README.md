@@ -2,6 +2,10 @@
 
 A Minecraft-styled soccer-pong game for the browser. Two blocky characters, one bouncy ball, two goals — first to **3 points** wins the match.
 
+**▶ Play it now: https://finnmcf1.github.io/blocky-pong/**
+
+*(The online version runs without the leaderboard server — the leaderboard screen shows as offline there.)*
+
 ![Gameplay](docs/screenshot-play.png)
 
 ## How to play
