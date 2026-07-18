@@ -422,6 +422,7 @@ function ensureAudio() {
 function goHome() {
   game.state = 'home';
   game.confetti.length = 0;
+  touchHeld.left = touchHeld.right = touchHeld.jump = false;
   resetChars();
 }
 
@@ -489,9 +490,12 @@ window.addEventListener('keyup', (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
-function canvasPos(e) {
+function canvasPosXY(clientX, clientY) {
   const r = canvas.getBoundingClientRect();
-  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
+}
+function canvasPos(e) {
+  return canvasPosXY(e.clientX, e.clientY);
 }
 canvas.addEventListener('mousemove', (e) => {
   mouse = canvasPos(e);
@@ -507,6 +511,64 @@ canvas.addEventListener('mousedown', (e) => {
   }
   if (game.state === 'gameover' && game.stateTimer <= 0) startMatch();
 });
+
+// ---------------------------------------------------------------------------
+// Touch controls (mobile). Everything here is gated behind touchMode, which
+// only flips on a real touch — the desktop experience is untouched.
+// ---------------------------------------------------------------------------
+let touchMode = false;
+const TOUCH_BTNS = {
+  left:  { x: 24,      y: H - 120, w: 100, h: 96, label: '◀' },
+  right: { x: 140,     y: H - 120, w: 100, h: 96, label: '▶' },
+  jump:  { x: W - 124, y: H - 120, w: 100, h: 96, label: '▲' },
+};
+const TOUCH_HOME = { x: W - 64, y: 14, w: 48, h: 48, label: '✕' };  // quit to menu
+const touchHeld = { left: false, right: false, jump: false };
+const MATCH_STATES = ['countdown', 'play', 'score', 'gameover'];
+
+function refreshTouchHeld(touchList) {
+  touchHeld.left = touchHeld.right = touchHeld.jump = false;
+  for (const t of touchList) {
+    const p = canvasPosXY(t.clientX, t.clientY);
+    for (const [name, r] of Object.entries(TOUCH_BTNS)) {
+      if (hit(r, p)) touchHeld[name] = true;
+    }
+  }
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();          // suppress scrolling and synthesized mouse events
+  touchMode = true;
+  ensureAudio();
+  const st = game.state;
+  const p = canvasPosXY(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+
+  if (!MATCH_STATES.includes(st)) {
+    // menu screens: a tap acts like a click
+    for (const b of currentButtons()) {
+      if (hit(b, p)) { b.action(); return; }
+    }
+    return;
+  }
+  if (hit(TOUCH_HOME, p)) { goHome(); return; }
+  if (st === 'gameover') {
+    if (game.stateTimer <= 0) startMatch();
+    return;
+  }
+  refreshTouchHeld(e.touches);
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  refreshTouchHeld(e.touches);
+}, { passive: false });
+
+for (const type of ['touchend', 'touchcancel']) {
+  canvas.addEventListener(type, (e) => {
+    if (e.cancelable) e.preventDefault();
+    refreshTouchHeld(e.touches);
+  }, { passive: false });
+}
 
 // ---------------------------------------------------------------------------
 // Update
@@ -775,9 +837,9 @@ function update(dt) {
     return;
   }
 
-  const moveDir = (keys['a'] || keys['arrowleft'] ? -1 : 0) +
-                  (keys['d'] || keys['arrowright'] ? 1 : 0);
-  const wantJump = keys['w'] || keys['arrowup'] || keys[' '];
+  const moveDir = (keys['a'] || keys['arrowleft'] || touchHeld.left ? -1 : 0) +
+                  (keys['d'] || keys['arrowright'] || touchHeld.right ? 1 : 0);
+  const wantJump = keys['w'] || keys['arrowup'] || keys[' '] || touchHeld.jump;
   updateChar(game.player, dt, moveDir, wantJump);
   updateAI(dt);
 
@@ -933,7 +995,10 @@ function drawHome() {
   drawChar(game.ai);
   centerText('BLOCKY PONG', 150, 'bold 64px monospace', '#ffffff');
   HOME_BUTTONS.forEach((b, i) => drawButton(b, i === game.menuIndex));
-  centerText('A/D or arrows to move — W / Space to jump', H - 14, 'bold 16px monospace', '#e8f6ff');
+  centerText(touchMode
+    ? 'touch: ◀ ▶ to move — ▲ to jump'
+    : 'A/D or arrows to move — W / Space to jump',
+    H - 14, 'bold 16px monospace', '#e8f6ff');
 }
 
 function drawGamemodes() {
@@ -1029,6 +1094,31 @@ function drawSkins() {
   drawButton(BACK_BUTTON);
 }
 
+// On-screen controls, drawn only after a real touch has been seen.
+function drawTouchControls() {
+  for (const [name, r] of Object.entries(TOUCH_BTNS)) {
+    ctx.fillStyle = touchHeld[name] ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.22)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(r.x, r.y + r.h - 5, r.w, 5);
+    ctx.fillRect(r.x + r.w - 5, r.y, 5, r.h);
+    ctx.font = 'bold 44px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillText(r.label, r.x + r.w / 2, r.y + r.h / 2 + 16);
+  }
+}
+
+function drawTouchHome() {
+  const r = TOUCH_HOME;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.font = 'bold 26px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(r.label, r.x + r.w / 2, r.y + r.h / 2 + 9);
+}
+
 function drawConfetti() {
   for (const p of game.confetti) {
     ctx.save();
@@ -1085,13 +1175,26 @@ function draw() {
       const won = game.playerScore > game.aiScore;
       centerText(won ? 'YOU WIN!' : 'AI WINS!', 200, 'bold 64px monospace',
         won ? '#d1ffd1' : '#ffd1d1');
-      centerText('press any key to play again', 280, 'bold 24px monospace', '#fff6ae');
-      centerText('esc — main menu', 316, 'bold 18px monospace', '#e8f6ff');
+      centerText(touchMode ? 'tap to play again' : 'press any key to play again',
+        280, 'bold 24px monospace', '#fff6ae');
+      centerText(touchMode ? '✕ — main menu' : 'esc — main menu',
+        316, 'bold 18px monospace', '#e8f6ff');
       if (game.unlockBanner) {
         centerText('NEW SKIN UNLOCKED: ' + game.unlockBanner + '!', 360,
           'bold 26px monospace', '#ffd740');
       }
     }
+
+    if (touchMode) {
+      if (st !== 'gameover') drawTouchControls();
+      drawTouchHome();
+    }
+  }
+
+  if (touchMode && window.innerHeight > window.innerWidth) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, 34);
+    centerText('rotate your phone for the best view', 24, 'bold 18px monospace', '#ffffff');
   }
 
   drawConfetti();

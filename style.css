@@ -13,6 +13,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* dvh tracks the real visible height on mobile as browser chrome
+     collapses; browsers without dvh keep the 100% height above */
+  height: 100dvh;
 }
 
 #game {
@@ -25,4 +28,10 @@ body {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+  /* mobile: the canvas owns all gestures — no scrolling, zooming, or
+     long-press selection while playing */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
