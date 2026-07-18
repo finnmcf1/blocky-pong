@@ -1,5 +1,9 @@
 # macOS
 .DS_Store
 
+# Python
+__pycache__/
+*.pyc
+
 # runtime data written by server.py — not source
 leaderboard.json
