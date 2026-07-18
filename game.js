@@ -422,7 +422,7 @@ function ensureAudio() {
 function goHome() {
   game.state = 'home';
   game.confetti.length = 0;
-  touchHeld.left = touchHeld.right = touchHeld.jump = false;
+  resetTouchInput();
   resetChars();
 }
 
@@ -517,23 +517,24 @@ canvas.addEventListener('mousedown', (e) => {
 // only flips on a real touch — the desktop experience is untouched.
 // ---------------------------------------------------------------------------
 let touchMode = false;
-const TOUCH_BTNS = {
-  left:  { x: 24,      y: H - 120, w: 100, h: 96, label: '◀' },
-  right: { x: 140,     y: H - 120, w: 100, h: 96, label: '▶' },
-  jump:  { x: W - 124, y: H - 120, w: 100, h: 96, label: '▲' },
-};
 const TOUCH_HOME = { x: W - 64, y: 14, w: 48, h: 48, label: '✕' };  // quit to menu
-const touchHeld = { left: false, right: false, jump: false };
 const MATCH_STATES = ['countdown', 'play', 'score', 'gameover'];
 
-function refreshTouchHeld(touchList) {
-  touchHeld.left = touchHeld.right = touchHeld.jump = false;
-  for (const t of touchList) {
-    const p = canvasPosXY(t.clientX, t.clientY);
-    for (const [name, r] of Object.entries(TOUCH_BTNS)) {
-      if (hit(r, p)) touchHeld[name] = true;
-    }
-  }
+// Floating joystick: touching anywhere on the LEFT half spawns a stick under
+// the finger; horizontal drag gives analog movement. Anywhere on the RIGHT
+// half is the jump zone. Touches are tracked by identifier so both work at
+// once and fingers can cross the midline mid-hold.
+const JOY_R = 58;            // knob travel radius (canvas px)
+const JOY_DEAD = 10;         // ignore tiny wobbles around the center
+const joy = { id: null, baseX: 0, baseY: 0, knobX: 0, dir: 0 };
+let jumpTouchId = null;
+let jumpHeld = false;
+
+function resetTouchInput() {
+  joy.id = null;
+  joy.dir = 0;
+  jumpTouchId = null;
+  jumpHeld = false;
 }
 
 canvas.addEventListener('touchstart', (e) => {
@@ -541,32 +542,56 @@ canvas.addEventListener('touchstart', (e) => {
   touchMode = true;
   ensureAudio();
   const st = game.state;
-  const p = canvasPosXY(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
 
   if (!MATCH_STATES.includes(st)) {
     // menu screens: a tap acts like a click
+    const p = canvasPosXY(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
     for (const b of currentButtons()) {
       if (hit(b, p)) { b.action(); return; }
     }
     return;
   }
-  if (hit(TOUCH_HOME, p)) { goHome(); return; }
-  if (st === 'gameover') {
-    if (game.stateTimer <= 0) startMatch();
-    return;
+
+  for (const t of e.changedTouches) {
+    const p = canvasPosXY(t.clientX, t.clientY);
+    if (hit(TOUCH_HOME, p)) { goHome(); return; }
+    if (st === 'gameover') {
+      if (game.stateTimer <= 0) { startMatch(); return; }
+      continue;
+    }
+    if (p.x < W / 2 && joy.id === null) {
+      joy.id = t.identifier;
+      joy.baseX = p.x;
+      joy.baseY = p.y;
+      joy.knobX = p.x;
+      joy.dir = 0;
+    } else if (p.x >= W / 2 && jumpTouchId === null) {
+      jumpTouchId = t.identifier;
+      jumpHeld = true;
+    }
   }
-  refreshTouchHeld(e.touches);
 }, { passive: false });
 
 canvas.addEventListener('touchmove', (e) => {
   e.preventDefault();
-  refreshTouchHeld(e.touches);
+  for (const t of e.changedTouches) {
+    if (t.identifier !== joy.id) continue;
+    const p = canvasPosXY(t.clientX, t.clientY);
+    const dx = Math.max(-JOY_R, Math.min(JOY_R, p.x - joy.baseX));
+    joy.knobX = joy.baseX + dx;
+    joy.dir = Math.abs(dx) < JOY_DEAD
+      ? 0
+      : (dx - Math.sign(dx) * JOY_DEAD) / (JOY_R - JOY_DEAD);
+  }
 }, { passive: false });
 
 for (const type of ['touchend', 'touchcancel']) {
   canvas.addEventListener(type, (e) => {
     if (e.cancelable) e.preventDefault();
-    refreshTouchHeld(e.touches);
+    for (const t of e.changedTouches) {
+      if (t.identifier === joy.id) { joy.id = null; joy.dir = 0; }
+      if (t.identifier === jumpTouchId) { jumpTouchId = null; jumpHeld = false; }
+    }
   }, { passive: false });
 }
 
@@ -837,9 +862,12 @@ function update(dt) {
     return;
   }
 
-  const moveDir = (keys['a'] || keys['arrowleft'] || touchHeld.left ? -1 : 0) +
-                  (keys['d'] || keys['arrowright'] || touchHeld.right ? 1 : 0);
-  const wantJump = keys['w'] || keys['arrowup'] || keys[' '] || touchHeld.jump;
+  // keyboard is digital, the joystick is analog — clamp their sum
+  const moveDir = Math.max(-1, Math.min(1,
+    (keys['a'] || keys['arrowleft'] ? -1 : 0) +
+    (keys['d'] || keys['arrowright'] ? 1 : 0) +
+    joy.dir));
+  const wantJump = keys['w'] || keys['arrowup'] || keys[' '] || jumpHeld;
   updateChar(game.player, dt, moveDir, wantJump);
   updateAI(dt);
 
@@ -996,7 +1024,7 @@ function drawHome() {
   centerText('BLOCKY PONG', 150, 'bold 64px monospace', '#ffffff');
   HOME_BUTTONS.forEach((b, i) => drawButton(b, i === game.menuIndex));
   centerText(touchMode
-    ? 'touch: ◀ ▶ to move — ▲ to jump'
+    ? 'left side: joystick to move — right side: tap to jump'
     : 'A/D or arrows to move — W / Space to jump',
     H - 14, 'bold 16px monospace', '#e8f6ff');
 }
@@ -1096,17 +1124,40 @@ function drawSkins() {
 
 // On-screen controls, drawn only after a real touch has been seen.
 function drawTouchControls() {
-  for (const [name, r] of Object.entries(TOUCH_BTNS)) {
-    ctx.fillStyle = touchHeld[name] ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.22)';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(r.x, r.y + r.h - 5, r.w, 5);
-    ctx.fillRect(r.x + r.w - 5, r.y, 5, r.h);
-    ctx.font = 'bold 44px monospace';
+  if (joy.id !== null) {
+    // active floating joystick: base ring + knob under the finger
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.beginPath();
+    ctx.arc(joy.baseX, joy.baseY, JOY_R + 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(joy.knobX, joy.baseY, 28, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // resting hint where the thumb usually sits
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath();
+    ctx.arc(110, H - 130, 52, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = 'bold 26px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillText(r.label, r.x + r.w / 2, r.y + r.h / 2 + 16);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('◀ ▶', 110, H - 121);
   }
+
+  // jump zone hint (the whole right half works; this is just the landmark)
+  ctx.fillStyle = jumpHeld ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.12)';
+  ctx.beginPath();
+  ctx.arc(W - 110, H - 130, 52, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = 'bold 34px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = jumpHeld ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.5)';
+  ctx.fillText('▲', W - 110, H - 118);
 }
 
 function drawTouchHome() {
