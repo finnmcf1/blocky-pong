@@ -1,0 +1,28 @@
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background: #1a1a2e;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game {
+  width: min(100vw, calc(100vh * 16 / 9));
+  /* flex items refuse to shrink below their content size by default; without
+     this a narrow window clips the canvas edges instead of scaling it down */
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+}

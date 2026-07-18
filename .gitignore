@@ -1,0 +1,5 @@
+# macOS
+.DS_Store
+
+# runtime data written by server.py — not source
+leaderboard.json
