@@ -36,10 +36,15 @@ const HIT_RALLY_RAMP = 55;       // extra speed per rally hit
 const HIT_RALLY_CAP = 8;
 const HIT_COOLDOWN = 0.25;
 
-// AI difficulty — lower speed / higher reaction = easier
-const AI_SPEED = 300;
-const AI_REACTION = 0.18;        // seconds between AI "looks" at the ball
-const AI_AIM_NOISE = 42;         // px of error in where it stands
+// AI difficulty presets — speed (px/s, player is 420), reaction (seconds
+// between "looks" at the ball), noise (px of aiming error), jumpChance
+// (per-frame probability while the ball is in jumping range)
+const DIFFICULTIES = {
+  easy:   { id: 'easy',   name: 'EASY',   speed: 230, reaction: 0.30, noise: 75, jumpChance: 0.07 },
+  normal: { id: 'normal', name: 'NORMAL', speed: 300, reaction: 0.18, noise: 42, jumpChance: 0.15 },
+  hard:   { id: 'hard',   name: 'HARD',   speed: 385, reaction: 0.09, noise: 16, jumpChance: 0.28 },
+};
+let aiDifficulty = DIFFICULTIES.normal;
 const AI_HOME_X = W * 0.74;
 
 // ---------------------------------------------------------------------------
@@ -234,6 +239,8 @@ const stats = Object.assign(
   store.get('stats', {})
 );
 
+aiDifficulty = DIFFICULTIES[store.get('difficulty', 'normal')] || DIFFICULTIES.normal;
+
 // ---------------------------------------------------------------------------
 // Skins — palettes for makeCharSprite, unlocked by total match wins
 // ---------------------------------------------------------------------------
@@ -421,6 +428,7 @@ function ensureAudio() {
 
 function goHome() {
   game.state = 'home';
+  game.menuIndex = 0;
   game.confetti.length = 0;
   resetTouchInput();
   resetChars();
@@ -432,13 +440,39 @@ function enterLeaderboard() {
 }
 
 const HOME_BUTTONS = [
-  { label: 'PLAY', action: () => { startMatch(); beep(660, 0.1); } },
+  { label: 'PLAY', action: () => { game.state = 'playselect'; game.menuIndex = 0; } },
   { label: 'GAMEMODES', action: () => { game.state = 'gamemodes'; } },
   { label: 'LEADERBOARDS', action: enterLeaderboard },
   { label: 'SKINS', action: () => { game.state = 'skins'; } },
 ].map((b, i) => ({ ...b, x: W / 2 - 160, y: 205 + i * 68, w: 320, h: 54 }));
 
+const PLAY_BUTTONS = [
+  { label: 'PLAY LOCAL', action: () => {
+    game.state = 'difficulty';
+    game.menuIndex = Object.keys(DIFFICULTIES).indexOf(aiDifficulty.id);
+  } },
+  { label: 'PLAY ONLINE', action: () => { game.state = 'online'; } },
+].map((b, i) => ({ ...b, x: W / 2 - 160, y: 240 + i * 68, w: 320, h: 54 }));
+
+const DIFF_BUTTONS = Object.values(DIFFICULTIES).map((d, i) => ({
+  label: d.name,
+  x: W / 2 - 160, y: 205 + i * 68, w: 320, h: 54,
+  action: () => {
+    aiDifficulty = d;
+    store.set('difficulty', d.id);
+    startMatch();
+    beep(660, 0.1);
+  },
+}));
+const DIFF_DESC = {
+  EASY: 'a gentle opponent — good for warming up',
+  NORMAL: 'the classic — a fair fight',
+  HARD: 'fast, sharp, and relentless',
+};
+
 const BACK_BUTTON = { label: 'BACK', x: 24, y: 20, w: 120, h: 44, action: goHome };
+const BACK_TO_PLAY = { label: 'BACK', x: 24, y: 20, w: 120, h: 44,
+  action: () => { game.state = 'playselect'; game.menuIndex = 0; } };
 const LB_REFRESH = { label: 'REFRESH', x: W - 168, y: 20, w: 144, h: 44, action: fetchLeaderboard };
 
 function skinCardRect(i) {
@@ -454,6 +488,9 @@ function skinCardRect(i) {
 function currentButtons() {
   switch (game.state) {
     case 'home': return HOME_BUTTONS;
+    case 'playselect': return [BACK_BUTTON, ...PLAY_BUTTONS];
+    case 'difficulty': return [BACK_TO_PLAY, ...DIFF_BUTTONS];
+    case 'online': return [BACK_TO_PLAY];
     case 'gamemodes': return [BACK_BUTTON];
     case 'leaderboard': return [BACK_BUTTON, LB_REFRESH];
     case 'skins': return [
@@ -473,12 +510,18 @@ window.addEventListener('keydown', (e) => {
   keys[e.key.toLowerCase()] = true;
   ensureAudio();
   const st = game.state;
-  if (st === 'home') {
-    if (e.key === 'ArrowUp') game.menuIndex = (game.menuIndex + 3) % 4;
-    else if (e.key === 'ArrowDown') game.menuIndex = (game.menuIndex + 1) % 4;
-    else if (e.key === 'Enter' || e.key === ' ') HOME_BUTTONS[game.menuIndex].action();
+  if (st === 'home' || st === 'playselect' || st === 'difficulty') {
+    const btns = st === 'home' ? HOME_BUTTONS
+      : st === 'playselect' ? PLAY_BUTTONS : DIFF_BUTTONS;
+    if (e.key === 'ArrowUp') game.menuIndex = (game.menuIndex + btns.length - 1) % btns.length;
+    else if (e.key === 'ArrowDown') game.menuIndex = (game.menuIndex + 1) % btns.length;
+    else if (e.key === 'Enter' || e.key === ' ') btns[game.menuIndex].action();
+    else if (e.key === 'Escape' && st === 'playselect') goHome();
+    else if (e.key === 'Escape' && st === 'difficulty') BACK_TO_PLAY.action();
   } else if (st === 'gamemodes' || st === 'leaderboard' || st === 'skins') {
     if (e.key === 'Escape') goHome();
+  } else if (st === 'online') {
+    if (e.key === 'Escape') BACK_TO_PLAY.action();
   } else if (st === 'gameover') {
     if (e.key === 'Escape') goHome();
     else if (game.stateTimer <= 0) { startMatch(); beep(660, 0.1); }
@@ -599,7 +642,7 @@ for (const type of ['touchend', 'touchcancel']) {
 // Update
 // ---------------------------------------------------------------------------
 function updateChar(ch, dt, moveDir, wantJump) {
-  ch.vx = moveDir * (ch.isPlayer ? CHAR_SPEED : AI_SPEED);
+  ch.vx = moveDir * (ch.isPlayer ? CHAR_SPEED : aiDifficulty.speed);
   if (wantJump && ch.onGround) {
     ch.vy = CHAR_JUMP;
     ch.onGround = false;
@@ -626,10 +669,10 @@ function updateAI(dt) {
   const a = game.ai, b = game.ball;
   a.lookTimer -= dt;
   if (a.lookTimer <= 0) {
-    a.lookTimer = AI_REACTION;
+    a.lookTimer = aiDifficulty.reaction;
     const incoming = b.vx > -60 || b.x > W / 2;
     a.targetX = incoming
-      ? b.x + (Math.random() * 2 - 1) * AI_AIM_NOISE
+      ? b.x + (Math.random() * 2 - 1) * aiDifficulty.noise
       : AI_HOME_X;
   }
   const cx = a.x + a.w / 2;
@@ -639,7 +682,7 @@ function updateAI(dt) {
   // jump at falling balls that are close and overhead
   const close = Math.abs(b.x - cx) < 120;
   const overhead = b.y < a.y + 20 && b.y > 60;
-  const wantJump = close && overhead && b.vy > 0 && Math.random() < 0.15;
+  const wantJump = close && overhead && b.vy > 0 && Math.random() < aiDifficulty.jumpChance;
 
   updateChar(a, dt, moveDir, wantJump);
 }
@@ -856,7 +899,8 @@ function update(dt) {
     mb.spin += (mb.vx / BALL_R) * dt * 0.6;
     return;
   }
-  if (game.state === 'gamemodes' || game.state === 'leaderboard' || game.state === 'skins') return;
+  if (['playselect', 'difficulty', 'online', 'gamemodes', 'leaderboard', 'skins']
+      .includes(game.state)) return;
   if (game.state === 'gameover') {
     game.stateTimer -= dt;
     return;
@@ -1027,6 +1071,31 @@ function drawHome() {
     ? 'left side: joystick to move — right side: tap to jump'
     : 'A/D or arrows to move — W / Space to jump',
     H - 14, 'bold 16px monospace', '#e8f6ff');
+}
+
+function drawPlaySelect() {
+  centerText('PLAY', 160, 'bold 48px monospace', '#ffffff');
+  PLAY_BUTTONS.forEach((b, i) => drawButton(b, i === game.menuIndex));
+  drawButton(BACK_BUTTON);
+}
+
+function drawDifficulty() {
+  centerText('DIFFICULTY', 150, 'bold 44px monospace', '#ffffff');
+  let highlighted = game.menuIndex;
+  DIFF_BUTTONS.forEach((b, i) => {
+    if (hit(b, mouse)) highlighted = i;
+    drawButton(b, i === game.menuIndex);
+  });
+  const d = Object.values(DIFFICULTIES)[highlighted];
+  centerText(DIFF_DESC[d.name] || '', 448, 'bold 18px monospace', '#e8f6ff');
+  drawButton(BACK_TO_PLAY);
+}
+
+function drawOnline() {
+  centerText('PLAY ONLINE', 150, 'bold 48px monospace', '#ffffff');
+  centerText('COMING SOON', 270, 'bold 44px monospace', '#fff6ae');
+  centerText('online matches are in the works', 320, 'bold 20px monospace', '#e8f6ff');
+  drawButton(BACK_TO_PLAY);
 }
 
 function drawGamemodes() {
@@ -1203,6 +1272,12 @@ function draw() {
 
   if (st === 'home') {
     drawHome();
+  } else if (st === 'playselect') {
+    drawPlaySelect();
+  } else if (st === 'difficulty') {
+    drawDifficulty();
+  } else if (st === 'online') {
+    drawOnline();
   } else if (st === 'gamemodes') {
     drawGamemodes();
   } else if (st === 'leaderboard') {
