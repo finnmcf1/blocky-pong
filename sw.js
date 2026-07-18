@@ -1,8 +1,8 @@
-// Blocky Pong service worker: precache the game for offline play.
+// Pixel Pitch service worker: precache the game for offline play.
 // Network-first for same-origin GETs so fresh deploys arrive immediately;
 // the cache is the fallback when offline. API calls are never cached.
 
-const CACHE = 'blocky-pong-v1';
+const CACHE = 'pixel-pitch-v1';
 const ASSETS = [
   '.',
   'index.html',

@@ -1,6 +1,6 @@
 {
-  "name": "Blocky Pong",
-  "short_name": "BlockyPong",
+  "name": "Pixel Pitch",
+  "short_name": "PixelPitch",
   "description": "Minecraft-styled soccer-pong. First to 3 wins!",
   "start_url": ".",
   "scope": ".",

@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "blocky-pong",
+      "name": "pixel-pitch",
       "runtimeExecutable": "/usr/bin/python3",
       "runtimeArgs": ["server.py"],
       "port": 8642

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Blocky Pong server: serves the game's static files and a small
+"""Pixel Pitch server: serves the game's static files and a small
 leaderboard REST API backed by leaderboard.json.
 
 Endpoints:
@@ -99,5 +99,5 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Blocky Pong server: http://127.0.0.1:{PORT}")
+    print(f"Pixel Pitch server: http://127.0.0.1:{PORT}")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

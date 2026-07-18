@@ -1,8 +1,8 @@
-# Blocky Pong ⚽
+# Pixel Pitch ⚽
 
 A Minecraft-styled soccer-pong game for the browser. Two blocky characters, one bouncy ball, two goals — first to **3 points** wins the match.
 
-**▶ Play it now: https://finnmcf1.github.io/blocky-pong/**
+**▶ Play it now: https://finnmcf1.github.io/pixel-pitch/**
 
 *(The online version runs without the leaderboard server — the leaderboard screen shows as offline there.)*
 
@@ -60,7 +60,7 @@ sounds/       goal sound sample
 docs/         screenshots
 ```
 
-Player progress (skins, stats, name) lives in the browser's `localStorage` under `blockyPong.*` keys.
+Player progress (skins, stats, name) lives in the browser's `localStorage` under `pixelPitch.*` keys.
 
 ## Roadmap
 

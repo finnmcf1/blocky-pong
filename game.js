@@ -1,5 +1,5 @@
-// Blocky Pong — a Minecraft-styled ping-pong game.
-// Single player (left, cyan) vs AI (right, red). First to 3 points wins.
+// Pixel Pitch — a Minecraft-styled soccer-pong game.
+// Single player (left) vs AI (right). First to 3 points wins.
 
 'use strict';
 
@@ -222,15 +222,27 @@ const AI_COLORS = {
 // ---------------------------------------------------------------------------
 // Persistence (localStorage) + player stats
 // ---------------------------------------------------------------------------
+const STORE_PREFIX = 'pixelPitch.';
+// one-time migration of saved progress from the game's old name
+try {
+  if (!localStorage.getItem('pixelPitch.stats') && localStorage.getItem('blockyPong.stats')) {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith('blockyPong.')) {
+        localStorage.setItem(STORE_PREFIX + k.slice('blockyPong.'.length), localStorage.getItem(k));
+      }
+    }
+  }
+} catch {}
+
 const store = {
   get(key, fallback) {
     try {
-      const v = JSON.parse(localStorage.getItem('blockyPong.' + key));
+      const v = JSON.parse(localStorage.getItem(STORE_PREFIX + key));
       return v === null || v === undefined ? fallback : v;
     } catch { return fallback; }
   },
   set(key, val) {
-    try { localStorage.setItem('blockyPong.' + key, JSON.stringify(val)); } catch {}
+    try { localStorage.setItem(STORE_PREFIX + key, JSON.stringify(val)); } catch {}
   },
 };
 
@@ -1075,7 +1087,7 @@ function drawHome() {
   drawBall(game.menuBall);
   drawChar(game.player);
   drawChar(game.ai);
-  centerText('BLOCKY PONG', 150, 'bold 64px monospace', '#ffffff');
+  centerText('PIXEL PITCH', 150, 'bold 64px monospace', '#ffffff');
   HOME_BUTTONS.forEach((b, i) => drawButton(b, i === game.menuIndex));
   centerText(touchMode
     ? 'left side: joystick to move — right side: tap to jump'
@@ -1337,7 +1349,7 @@ function draw() {
 }
 
 // Debug handle for testing from the console
-window.BLOCKY_PONG = game;
+window.PIXEL_PITCH = game;
 
 // PWA: offline cache + installability
 if ('serviceWorker' in navigator) {
