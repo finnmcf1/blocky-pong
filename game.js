@@ -288,6 +288,15 @@ function applySkin(id) {
 }
 applySkin(store.get('skin', 'classic'));
 
+// The AI wears a random skin each match — never the one the player has on.
+function randomizeAiSkin() {
+  const pool = SKINS.filter(s => s.id !== currentSkinId);
+  const skin = pool[(Math.random() * pool.length) | 0];
+  sprites.aiIdle = makeCharSprite(skin.colors, null);
+  sprites.aiSwing = makeCharSprite(skin.colors, 'left');
+}
+randomizeAiSkin();
+
 // Soccer ball sprite: pixel circle, white with a center pentagon and five
 // rim patches spaced evenly (72 degrees apart) so the ball looks the same
 // from every side as it spins.
@@ -388,6 +397,7 @@ function startMatch() {
   game.serveDir = Math.random() < 0.5 ? -1 : 1;
   game.matchStart = Date.now();
   game.unlockBanner = null;
+  randomizeAiSkin();
   serve();
 }
 
